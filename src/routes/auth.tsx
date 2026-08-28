@@ -4,9 +4,90 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadCountries, type Country } from "@/data/countries";
-export const Route=createFileRoute("/auth")({component:Auth}); type Mode="login"|"signup"|"verify"|"reset";
-function Auth(){const navigate=useNavigate();const[mode,setMode]=useState<Mode>("login"),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[showPassword,setShowPassword]=useState(false),[fullName,setFullName]=useState(""),[phone,setPhone]=useState(""),[country,setCountry]=useState("NG"),[countryCode,setCountryCode]=useState("+234"),[countries,setCountries]=useState<Country[]>([]),[code,setCode]=useState(""),[loading,setLoading]=useState(false);
-useEffect(()=>{void loadCountries().then(setCountries)},[]); useEffect(()=>{const c=countries.find(x=>x.code===country);if(c?.callingCode)setCountryCode(c.callingCode)},[country,countries]); function switchMode(next:Mode){setMode(next);setShowPassword(false)}
-async function submit(event:FormEvent){event.preventDefault();setLoading(true);try{if(mode==="login"){const{data,error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)throw error;if(!data.session)throw new Error("No login session was created. Please try again.");if(!data.user.email_confirmed_at){switchMode("verify");toast.info("Please verify your email before continuing.");return}toast.success("Welcome back to SmartChain");void navigate({to:"/",replace:true})}else if(mode==="signup"){const selectedCountry=countries.find(c=>c.code===country);const{data,error}=await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:`${window.location.origin}/auth`,data:{display_name:fullName.trim(),phone:phone.trim(),country:selectedCountry?.name||country,country_code:countryCode,country_iso:country}}});if(error)throw error;if(!data.user)throw new Error("We could not create your account. Please try again.");if(data.user.email_confirmed_at){toast.success("Account created successfully");void navigate({to:"/",replace:true})}else{switchMode("verify");toast.success("Verification code sent. Check your email inbox and spam folder.")}}else if(mode==="verify"){const{error}=await supabase.auth.verifyOtp({email:email.trim(),token:code.trim(),type:"email"});if(error)throw error;toast.success("Email verified successfully");void navigate({to:"/",replace:true})}else{const{error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:`${window.location.origin}/auth?reset=1`});if(error)throw error;toast.success("Password reset instructions sent to your email");switchMode("login")}}catch(error){toast.error(error instanceof Error?error.message:"Unable to continue. Please try again.")}finally{setLoading(false)}}
-async function resendCode(){if(!email.trim())return;setLoading(true);try{const{error}=await supabase.auth.resend({type:"signup",email:email.trim()});if(error)throw error;toast.success("A new verification email was requested. Check your inbox and spam folder.")}catch(error){toast.error(error instanceof Error?error.message:"Unable to resend the code.")}finally{setLoading(false)}}
-const title=mode==="login"?"Welcome back":mode==="signup"?"Create your SmartChain account":mode==="verify"?"Verify your email":"Reset your password";return <main className="mx-auto grid min-h-screen max-w-lg place-items-center px-4 py-8"><section className="w-full rounded-3xl border border-border bg-card p-6 shadow-lg"><div className="mb-7 text-center"><img src="/smartchain-logo.svg" alt="SmartChain" className="mx-auto size-12 rounded-2xl"/><h1 className="mt-4 text-2xl font-semibold">{title}</h1><p className="mt-2 text-sm text-muted-foreground">Securely access your wallet dashboard and portfolio.</p></div>{mode==="verify"?<form onSubmit={e=>void submit(e)} className="space-y-4"><p className="text-sm text-muted-foreground">We sent a verification code to <b className="text-foreground">{email}</b>. Check your inbox and spam/junk folder.</p><label className="block text-sm font-medium">Verification code<input required minLength={6} maxLength={8} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,8))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-center text-xl tracking-[0.4em] outline-none focus:border-primary" placeholder="000000"/></label><button disabled={loading||code.length<6} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading?"Verifying…":"Verify email"}</button><button type="button" disabled={loading} onClick={()=>void resendCode()} className="w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold">Resend code</button><button type="button" onClick={()=>switchMode("login")} className="w-full text-sm text-muted-foreground">Back to sign in</button></form>:<><div className="mb-6 grid grid-cols-2 rounded-xl bg-secondary p-1"><button type="button" onClick={()=>switchMode("login")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode==="login"?"bg-background shadow-sm":"text-muted-foreground"}`}>Sign in</button><button type="button" onClick={()=>switchMode("signup")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode==="signup"?"bg-background shadow-sm":"text-muted-foreground"}`}>Create account</button></div><form onSubmit={e=>void submit(e)} className="space-y-4">{mode==="signup"&&<><label className="block text-sm font-medium">Full name<input required value={fullName} onChange={e=>setFullName(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 outline-none focus:border-primary" placeholder="Your full name"/></label><div className="grid grid-cols-[0.9fr_1.1fr] gap-2"><label className="block text-sm font-medium">Country code<select value={countryCode} onChange={e=>setCountryCode(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{Array.from(new Map(countries.map(c=>[c.callingCode,c.callingCode])).values()).filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(c=><option key={c} value={c}>{c}</option>)}</select></label><label className="block text-sm font-medium">Phone<input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Phone number"/></label></div><label className="block text-sm font-medium">Country<select required value={country} onChange={e=>setCountry(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{countries.map(c=><option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}</select></label></>}<label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 outline-none focus:border-primary" placeholder="you@example.com"/></label>{mode==="login"||mode==="signup"?<label className="block text-sm font-medium">Password<span className="relative mt-1.5 block"><input required minLength={6} type={showPassword?"text":"password"} autoComplete={mode==="login"?"current-password":"new-password"} value={password} onChange={e=>setPassword(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-3 pr-11 outline-none focus:border-primary" placeholder="At least 6 characters"/><button type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?"Hide password":"Show password"} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:text-foreground">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></span></label>:<p className="rounded-xl bg-secondary p-3 text-sm text-muted-foreground">Enter the email on your SmartChain account and we will send password reset instructions.</p>}<button disabled={loading} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading?"Please wait…":mode==="login"?"Sign in":mode==="signup"?"Create account":"Send reset email"}</button></form>{mode==="login"&&<button type="button" onClick={()=>switchMode("reset")} className="mt-4 w-full text-sm text-muted-foreground">Forgot password?</button>}{mode==="reset"&&<button type="button" onClick={()=>switchMode("login")} className="mt-4 w-full text-sm text-muted-foreground">Back to sign in</button>}</>}</section></main>}
+
+export const Route = createFileRoute("/auth")({ component: Auth });
+type Mode = "login" | "signup" | "verify" | "reset";
+
+function Auth() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("NG");
+  const [countryCode, setCountryCode] = useState("+234");
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => { void loadCountries().then(setCountries); }, []);
+  useEffect(() => {
+    const selected = countries.find((c) => c.code === country);
+    if (selected?.callingCode) setCountryCode(selected.callingCode);
+  }, [country, countries]);
+
+  function switchMode(next: Mode) { setMode(next); setShowPassword(false); setCode(""); }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      if (mode === "signup") {
+        const selectedCountry = countries.find((c) => c.code === country);
+        const { data, error } = await supabase.auth.signUp({ email: cleanEmail, password, options: { emailRedirectTo: `${window.location.origin}/auth`, data: { display_name: fullName.trim(), full_name: fullName.trim(), phone: phone.trim(), country: selectedCountry?.name || country, country_code: countryCode, country_iso: country } } });
+        if (error) throw error;
+        if (!data.user) throw new Error("We could not create your account. Please try again.");
+        setEmail(cleanEmail);
+        if (data.user.email_confirmed_at) { toast.success("Account created successfully"); await navigate({ to: "/", replace: true }); }
+        else { switchMode("verify"); toast.success("Account created. Enter the verification code sent to your email."); }
+      } else if (mode === "verify") {
+        if (code.trim().length !== 6) throw new Error("Enter the 6-digit verification code.");
+        const { data, error } = await supabase.auth.verifyOtp({ email: cleanEmail, token: code.trim(), type: "signup" });
+        if (error) throw error;
+        if (!data.session) {
+          const login = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+          if (login.error) throw login.error;
+        }
+        toast.success("Email verified successfully");
+        await navigate({ to: "/", replace: true });
+      } else if (mode === "login") {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+        if (error) {
+          const message = error.message.toLowerCase();
+          if (message.includes("email not confirmed") || message.includes("email_not_confirmed")) {
+            switchMode("verify");
+            await supabase.auth.resend({ type: "signup", email: cleanEmail });
+            toast.info("Your email is not verified. We sent a new verification code.");
+            return;
+          }
+          throw error;
+        }
+        if (!data.session) throw new Error("No login session was created. Please try again.");
+        toast.success("Welcome back to SmartChain");
+        await navigate({ to: "/", replace: true });
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth?reset=1` });
+        if (error) throw error;
+        toast.success("Password reset instructions sent to your email");
+        switchMode("login");
+      }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to continue. Please try again."); }
+    finally { setLoading(false); }
+  }
+
+  async function resendCode() {
+    if (!email.trim()) return;
+    setLoading(true);
+    try { const { error } = await supabase.auth.resend({ type: "signup", email: email.trim().toLowerCase() }); if (error) throw error; toast.success("A new verification code was sent. Check your inbox and spam folder."); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Unable to resend the code."); }
+    finally { setLoading(false); }
+  }
+
+  const title = mode === "login" ? "Welcome back" : mode === "signup" ? "Welcome to SmartChain" : mode === "verify" ? "Verify your email" : "Reset your password";
+  const subtitle = mode === "signup" ? "Create your wallet and get started securely." : "Securely access your wallet dashboard and portfolio.";
+
+  return <main className="mx-auto grid min-h-screen max-w-lg place-items-center px-4 py-8"><section className="w-full rounded-3xl border border-border bg-card p-6 shadow-lg"><div className="mb-7 text-center"><img src="/smartchain-logo.svg" alt="SmartChain" className="mx-auto size-12 rounded-2xl"/><h1 className="mt-4 text-2xl font-semibold">{title}</h1><p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>{mode === "signup" && <p className="mt-2 text-sm font-medium text-primary">Create your wallet</p>}</div>{mode === "verify" ? <form onSubmit={(e) => void submit(e)} className="space-y-4"><p className="text-sm text-muted-foreground">We sent a 6-digit verification code to <b className="text-foreground">{email}</b>. Check your inbox and spam/junk folder.</p><label className="block text-sm font-medium">Verification code<input required minLength={6} maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-center text-xl tracking-[0.4em] outline-none focus:border-primary" placeholder="000000"/></label><button disabled={loading || code.length !== 6} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading ? "Verifying…" : "Verify email"}</button><button type="button" disabled={loading} onClick={() => void resendCode()} className="w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold">Resend code</button><button type="button" onClick={() => switchMode("login")} className="w-full text-sm text-muted-foreground">Back to sign in</button></form> : <><div className="mb-6 grid grid-cols-2 rounded-xl bg-secondary p-1"><button type="button" onClick={() => switchMode("login")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode === "login" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Sign in</button><button type="button" onClick={() => switchMode("signup")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode === "signup" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Create account</button></div><form onSubmit={(e) => void submit(e)} className="space-y-4">{mode === "signup" && <><label className="block text-sm font-medium">Full name<input required value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 outline-none focus:border-primary" placeholder="Your full name"/></label><div className="grid grid-cols-[0.9fr_1.1fr] gap-2"><label className="block text-sm font-medium">Country code<select value={countryCode} onChange={(e) => setCountryCode(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{Array.from(new Map(countries.map((c) => [c.callingCode, c.callingCode])).values()).filter(Boolean).sort((a,b) => a.localeCompare(b, undefined, { numeric: true })).map((c) => <option key={c} value={c}>{c}</option>)}</select></label><label className="block text-sm font-medium">Phone<input required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Phone number"/></label></div><label className="block text-sm font-medium">Country<select required value={country} onChange={(e) => setCountry(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{countries.map((c) => <option key={c.code} value={c.code}>{c.name} ({c.callingCode})</option>)}</select></label></>}<label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 outline-none focus:border-primary" placeholder="you@example.com"/></label>{mode === "login" || mode === "signup" ? <label className="block text-sm font-medium">Password<span className="relative mt-1.5 block"><input required minLength={6} type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-3 pr-11 outline-none focus:border-primary" placeholder="At least 6 characters"/><button type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? "Hide password" : "Show password"} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground hover:text-foreground">{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></span></label> : <p className="rounded-xl bg-secondary p-3 text-sm text-muted-foreground">Enter the email on your SmartChain account and we will send password reset instructions.</p>}<button disabled={loading} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading ? "Please wait…" : mode === "login" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset email"}</button></form>{mode === "login" && <button type="button" onClick={() => switchMode("reset")} className="mt-4 w-full text-sm text-muted-foreground">Forgot password?</button>}{mode === "reset" && <button type="button" onClick={() => switchMode("login")} className="mt-4 w-full text-sm text-muted-foreground">Back to sign in</button>}</>}</section></main>;
+}
