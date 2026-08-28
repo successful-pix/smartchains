@@ -1,0 +1,6 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { useMarkets } from "@/hooks/useMarkets";
+import { formatFiat } from "@/lib/format";
+export const Route = createFileRoute("/markets")({ component: Markets });
+function Markets(){ const {markets,isLoading,error}=useMarkets(); return <main className="mx-auto max-w-lg px-4 pt-5 pb-24"><a href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ArrowLeft size={17}/> Dashboard</a><h1 className="mt-5 text-2xl font-semibold">Markets</h1><p className="mt-1 text-sm text-muted-foreground">Live crypto market prices.</p><div className="mt-5 divide-y divide-border rounded-2xl border border-border bg-card">{isLoading?<p className="p-5 text-sm">Loading markets…</p>:error?<p className="p-5 text-sm text-destructive">{(error as Error).message}</p>:markets.map(m=><a href={`/asset/${m.id}`} key={m.id} className="flex items-center gap-3 p-4 hover:bg-secondary"><img src={m.image} className="size-9 rounded-full"/><span className="flex-1"><b>{m.name}</b><span className="ml-2 text-xs text-muted-foreground">{m.symbol}</span></span><span className="text-right"><b>{formatFiat(m.price)}</b><span className={`block text-xs ${m.changePercent24h>=0?'text-success':'text-destructive'}`}>{m.changePercent24h.toFixed(2)}%</span></span></a>)}</div></main>; }

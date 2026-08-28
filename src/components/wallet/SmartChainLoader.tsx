@@ -1,0 +1,3 @@
+export function SmartChainLoader() {
+  return <div className="fixed inset-0 z-[100] grid place-items-center bg-background px-6"><div className="text-center"><div className="relative mx-auto grid size-24 place-items-center"><div className="absolute inset-0 animate-spin rounded-full border-2 border-primary/20 border-t-primary"/><img src="/smartchain-logo.svg" alt="SmartChain" className="size-16 rounded-2xl shadow-xl"/></div><h1 className="mt-6 font-display text-2xl font-semibold tracking-tight">SmartChain</h1><p className="mt-2 text-sm text-muted-foreground">Preparing your secure wallet…</p><div className="mx-auto mt-6 h-1.5 w-40 overflow-hidden rounded-full bg-secondary"><div className="h-full w-1/2 animate-pulse rounded-full bg-primary"/></div></div></div>;
+}

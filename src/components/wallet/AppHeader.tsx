@@ -1,0 +1,43 @@
+import { Bell, Menu, ShieldCheck, Settings, FileCheck2, UserRound, X, MessageCircle, Shield } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface AppHeaderProps { notificationCount?: number; }
+
+export function AppHeader({ notificationCount = 0 }: AppHeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (active) setIsAdmin(data?.role === "admin");
+    })();
+    return () => { active = false; };
+  }, []);
+
+  async function signOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) { toast.error(error.message); return; }
+    setMenuOpen(false);
+    toast.success("You have been signed out");
+    void navigate({ to: "/auth", replace: true });
+  }
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-lg items-center gap-3 px-4">
+        <button type="button" aria-label="Open SmartChain menu" onClick={() => setMenuOpen(true)} className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Menu size={20} /></button>
+        <Link to="/" className="flex min-w-0 items-center gap-2"><img src="/smartchain-logo.svg" alt="SmartChain" className="size-7 shrink-0 rounded-[8px]" /><span className="truncate font-display text-[15px] font-semibold tracking-tight">SmartChain</span></Link>
+        <div className="ml-auto flex items-center gap-1"><Link to="/account" aria-label="Security center" className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-primary"><ShieldCheck size={19} /></Link><Link to="/notifications" aria-label={notificationCount > 0 ? `Notifications, ${notificationCount} unread` : "Notifications"} className="relative rounded-md p-1.5 text-muted-foreground hover:bg-secondary"><Bell size={19} />{notificationCount > 0 && <span className="absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-4 text-destructive-foreground">{notificationCount > 9 ? "9+" : notificationCount}</span>}</Link><Link to="/account" aria-label="Account" className="ml-1 grid size-8 place-items-center rounded-full border border-border bg-secondary text-xs font-semibold text-muted-foreground hover:border-primary hover:text-primary">SC</Link></div>
+      </div>
+      {menuOpen && <div className="fixed inset-0 z-50"><button aria-label="Close menu" className="absolute inset-0 bg-black/30" onClick={() => setMenuOpen(false)} /><aside className="absolute left-0 top-14 max-h-[calc(100vh-5rem)] w-[min(78vw,310px)] overflow-y-auto rounded-r-2xl border border-border bg-background p-4 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-[11px] text-muted-foreground">SmartChain</p><h2 className="text-base font-medium">Settings & account</h2></div><button type="button" aria-label="Close settings menu" onClick={() => setMenuOpen(false)} className="rounded-lg p-1.5 hover:bg-secondary"><X size={18} /></button></div><nav className="mt-4 space-y-1"><Link onClick={() => setMenuOpen(false)} to="/settings" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"><Settings size={17} /><span>Settings</span></Link><Link onClick={() => setMenuOpen(false)} to="/kyc" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"><FileCheck2 size={17} /><span>KYC verification</span></Link><Link onClick={() => setMenuOpen(false)} to="/support" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"><MessageCircle size={17} /><span>Support chat</span></Link>{isAdmin && <Link onClick={() => setMenuOpen(false)} to="/admin" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"><Shield size={17} /><span>Admin panel</span></Link>}<Link onClick={() => setMenuOpen(false)} to="/account" className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"><UserRound size={17} /><span>Account</span></Link></nav><button type="button" onClick={() => void signOut()} className="mt-4 w-full rounded-lg border border-destructive/30 px-3 py-2 text-left text-sm font-medium text-destructive">Sign out</button></aside></div>}
+    </header>
+  );
+}

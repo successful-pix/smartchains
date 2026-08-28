@@ -1,0 +1,6 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { usePortfolio, useTransactions } from "@/hooks/useWalletData";
+import { formatFiat } from "@/lib/format";
+export const Route = createFileRoute("/wallet")({ component: Wallet });
+function Wallet(){const p=usePortfolio();const tx=useTransactions(50);return <main className="mx-auto max-w-lg px-4 pt-5 pb-24"><a href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ArrowLeft size={17}/> Dashboard</a><h1 className="mt-5 text-2xl font-semibold">Wallet</h1><div className="mt-5 rounded-2xl border border-border bg-card p-5"><p className="text-xs text-muted-foreground">Portfolio</p><p className="mt-1 text-3xl font-semibold">{formatFiat(p.portfolio.availableBalance)}</p></div><h2 className="mt-6 mb-2 text-sm font-semibold">Transaction history</h2><div className="rounded-2xl border border-border bg-card divide-y divide-border">{tx.isLoading?<p className="p-4 text-sm">Loading…</p>:(tx.data??[]).length===0?<p className="p-5 text-sm text-muted-foreground">No transactions yet.</p>:(tx.data??[]).map(t=><div key={t.id} className="flex justify-between p-4"><span className="capitalize">{t.type} · {t.symbol}<small className="block text-xs text-muted-foreground">{t.status}</small></span><b>{formatFiat(t.fiat_value)}</b></div>)}</div></main>}

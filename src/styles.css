@@ -1,0 +1,118 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * SmartChain design system — dark premium crypto wallet.
+ * All color values in oklch. Add new tokens to :root and @theme inline.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-card: 12px;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-bright: var(--primary-bright);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* #0B0E11 */
+  --background: oklch(0.171 0.011 264.6);
+  /* #F5F5F5 */
+  --foreground: oklch(0.965 0 0);
+  /* #1E2329 */
+  --card: oklch(0.243 0.011 255.9);
+  --card-foreground: oklch(0.965 0 0);
+  --popover: oklch(0.243 0.011 255.9);
+  --popover-foreground: oklch(0.965 0 0);
+  /* #F0B90B */
+  --primary: oklch(0.803 0.164 84.5);
+  --primary-foreground: oklch(0.171 0.011 264.6);
+  /* #FCD535 */
+  --primary-bright: oklch(0.876 0.157 89.5);
+  /* #181A20 */
+  --secondary: oklch(0.215 0.01 265);
+  --secondary-foreground: oklch(0.965 0 0);
+  --surface: oklch(0.215 0.01 265);
+  --muted: oklch(0.243 0.011 255.9);
+  /* #B7BDC6 */
+  --muted-foreground: oklch(0.789 0.011 258);
+  --accent: oklch(0.243 0.011 255.9);
+  --accent-foreground: oklch(0.803 0.164 84.5);
+  /* #F6465D */
+  --destructive: oklch(0.639 0.213 20.5);
+  --destructive-foreground: oklch(0.965 0 0);
+  /* #0ECB81 */
+  --success: oklch(0.732 0.176 158.9);
+  /* #2B3139 */
+  --border: oklch(0.294 0.012 258);
+  --input: oklch(0.294 0.012 258);
+  --ring: oklch(0.803 0.164 84.5);
+
+  --gradient-card: linear-gradient(
+    135deg,
+    oklch(0.268 0.012 258) 0%,
+    oklch(0.215 0.01 265) 55%,
+    oklch(0.24 0.03 90 / 0.55) 100%
+  );
+  --gradient-gold: linear-gradient(135deg, var(--primary-bright), var(--primary));
+  --shadow-card: 0 18px 40px -20px oklch(0 0 0 / 0.9);
+  --shadow-gold: 0 8px 24px -12px oklch(0.803 0.164 84.5 / 0.55);
+}
+
+@utility bank-card {
+  background-image: var(--gradient-card);
+  box-shadow: var(--shadow-card);
+}
+
+@utility text-gold-gradient {
+  background-image: var(--gradient-gold);
+  background-clip: text;
+  color: transparent;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "tnum" 1;
+  }
+}
