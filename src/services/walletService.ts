@@ -6,51 +6,40 @@ export async function getHoldings(): Promise<WalletHolding[]> {
   if (error) { console.warn("[wallet] wallet_holdings unavailable; using zero balances", error.message); return []; }
   return (data ?? []).map((row) => ({ id: row.id, asset_id: row.asset_id, symbol: row.symbol, balance: Number(row.balance) }));
 }
-
 export async function getTransactions(limit = 50): Promise<WalletTransaction[]> {
   const { data, error } = await supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(limit);
   if (error) { console.warn("[wallet] transactions unavailable; showing empty activity", error.message); return []; }
   return (data ?? []).map((row) => ({ id: row.id, type: row.type as TransactionType, asset_id: row.asset_id, symbol: row.symbol, amount: Number(row.amount), fiat_value: Number(row.fiat_value), status: row.status as WalletTransaction["status"], is_onchain: row.is_onchain, reference: row.reference, counterparty: row.counterparty, network: row.network, note: row.note, created_at: row.created_at }));
 }
-
 export interface NewTransaction { type: TransactionType; asset_id: string; symbol: string; amount: number; fiat_value: number; counterparty?: string; network?: string; note?: string; }
-
-const NATIVE_GAS_BY_NETWORK: Record<string, string> = {
-  ethereum: "ETH", eth: "ETH", erc20: "ETH", "ethereum-mainnet": "ETH",
-  arbitrum: "ETH", optimism: "ETH", base: "ETH",
-  polygon: "POL", matic: "POL", bsc: "BNB", bep20: "BNB", binance: "BNB",
-  avalanche: "AVAX", avax: "AVAX",
-};
-
-export function getNativeGasSymbol(network?: string | null) {
-  const key = (network ?? "ethereum").trim().toLowerCase();
-  return NATIVE_GAS_BY_NETWORK[key] ?? "ETH";
-}
-
-export async function createTransactionRequest(input: NewTransaction) {
+const NATIVE_GAS_BY_NETWORK: Record<string, string> = { ethereum:"ETH",eth:"ETH",erc20:"ETH","ethereum-mainnet":"ETH",arbitrum:"ETH",optimism:"ETH",base:"ETH",polygon:"POL",matic:"POL",bsc:"BNB",bep20:"BNB",binance:"BNB",avalanche:"AVAX",avax:"AVAX" };
+export function getNativeGasSymbol(network?: string | null) { return NATIVE_GAS_BY_NETWORK[(network ?? "ethereum").trim().toLowerCase()] ?? "ETH"; }
+export async function assertAccountCanTransact() {
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
   if (!userId) throw new Error("You must be signed in.");
-
+  const { data: profile, error } = await supabase.from("profiles").select("account_status").eq("id", userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if ((profile as { account_status?: string } | null)?.account_status === "blocked") throw new Error("Action can't be done. Please contact support.");
+  return userId;
+}
+export async function createTransactionRequest(input: NewTransaction) {
+  const userId = await assertAccountCanTransact();
   if (input.type === "send") {
     const gasSymbol = getNativeGasSymbol(input.network);
     const { data: gasHolding, error: gasError } = await supabase.from("wallet_holdings").select("balance").eq("symbol", gasSymbol).maybeSingle();
     if (gasError) throw new Error(gasError.message);
-    if (!(Number(gasHolding?.balance ?? 0) > 0)) {
-      throw new Error(`Insufficient ${gasSymbol} balance to cover network fees.`);
-    }
+    if (!(Number(gasHolding?.balance ?? 0) > 0)) throw new Error(`Insufficient ${gasSymbol} balance to cover network fees.`);
   }
-
-  const { data, error } = await supabase.from("transactions").insert({ user_id: userId, type: input.type, asset_id: input.asset_id, symbol: input.symbol, amount: input.amount, fiat_value: input.fiat_value, status: "pending", is_onchain: false, counterparty: input.counterparty ?? null, network: input.network ?? null, note: input.note ?? null }).select("reference").single();
+  const { data, error } = await supabase.from("transactions").insert({ user_id:userId,type:input.type,asset_id:input.asset_id,symbol:input.symbol,amount:input.amount,fiat_value:input.fiat_value,status:"pending",is_onchain:false,counterparty:input.counterparty??null,network:input.network??null,note:input.note??null }).select("reference").single();
   if (error) throw new Error(error.message);
-  await supabase.from("notifications").insert({ user_id: userId, category: "transaction", title: `${input.type[0]!.toUpperCase()}${input.type.slice(1)} request created`, body: `${input.amount} ${input.symbol} · reference ${data.reference}. Pending — not broadcast to a blockchain network.` });
+  await supabase.from("notifications").insert({ user_id:userId,category:"transaction",title:`${input.type[0]!.toUpperCase()}${input.type.slice(1)} request created`,body:`${input.amount} ${input.symbol} · reference ${data.reference}. Pending — not broadcast to a blockchain network.` });
   return data.reference as string;
 }
-
-export async function getNotifications(): Promise<AppNotification[]> { const { data, error } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50); if (error) { console.warn("[wallet] notifications unavailable", error.message); return []; } return (data ?? []) as AppNotification[]; }
-export async function markNotificationRead(id: string) { const { error } = await supabase.from("notifications").update({ read: true }).eq("id", id); if (error) throw new Error(error.message); }
-export async function markAllNotificationsRead() { const { error } = await supabase.from("notifications").update({ read: true }).eq("read", false); if (error) throw new Error(error.message); }
-export async function getProfile(): Promise<Profile | null> { const { data, error } = await supabase.from("profiles").select("id, display_name, avatar_url").maybeSingle(); if (error) throw new Error(error.message); return data as Profile | null; }
-export async function updateProfile(patch: { display_name?: string }) { const { data: auth } = await supabase.auth.getUser(); if (!auth.user) throw new Error("You must be signed in."); const { error } = await supabase.from("profiles").update(patch).eq("id", auth.user.id); if (error) throw new Error(error.message); }
-export async function getPreferences(): Promise<UserPreferences | null> { const { data: auth } = await supabase.auth.getUser(); if (!auth.user) return null; const { data, error } = await supabase.from("user_preferences").select("*").eq("user_id", auth.user.id).maybeSingle(); if (error) throw new Error(error.message); return data as UserPreferences | null; }
-export async function updatePreferences(patch: Partial<UserPreferences>) { const { data: auth } = await supabase.auth.getUser(); if (!auth.user) throw new Error("You must be signed in."); const { error } = await supabase.from("user_preferences").upsert({ user_id: auth.user.id, ...patch }, { onConflict: "user_id" }); if (error) throw new Error(error.message); }
+export async function getNotifications(): Promise<AppNotification[]> { const { data,error }=await supabase.from("notifications").select("*").order("created_at",{ascending:false}).limit(50); if(error){console.warn("[wallet] notifications unavailable",error.message);return [];} return (data??[]) as AppNotification[]; }
+export async function markNotificationRead(id:string){const{error}=await supabase.from("notifications").update({read:true}).eq("id",id);if(error)throw new Error(error.message)}
+export async function markAllNotificationsRead(){const{error}=await supabase.from("notifications").update({read:true}).eq("read",false);if(error)throw new Error(error.message)}
+export async function getProfile():Promise<Profile|null>{const{data,error}=await supabase.from("profiles").select("id, display_name, avatar_url, account_status").maybeSingle();if(error)throw new Error(error.message);return data as Profile|null}
+export async function updateProfile(patch:{display_name?:string}){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const{error}=await supabase.from("profiles").update(patch).eq("id",auth.user.id);if(error)throw new Error(error.message)}
+export async function getPreferences():Promise<UserPreferences|null>{const{data:auth}=await supabase.auth.getUser();if(!auth.user)return null;const{data,error}=await supabase.from("user_preferences").select("*").eq("user_id",auth.user.id).maybeSingle();if(error)throw new Error(error.message);return data as UserPreferences|null}
+export async function updatePreferences(patch:Partial<UserPreferences>){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const{error}=await supabase.from("user_preferences").upsert({user_id:auth.user.id,...patch},{onConflict:"user_id"});if(error)throw new Error(error.message)}
