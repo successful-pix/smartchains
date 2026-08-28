@@ -29,13 +29,13 @@ export function BalanceCard({ portfolio, loading = false }: BalanceCardProps) {
     let cancelled = false;
     if (currency === "USD") { setRate(1); setRateLoading(false); return; }
     setRateLoading(true);
-    fetch(`https://api.frankfurter.app/latest?from=USD&to=${encodeURIComponent(currency)}`)
+    fetch("https://open.er-api.com/v6/latest/USD")
       .then((r) => r.ok ? r.json() : Promise.reject(new Error("FX request failed")))
       .then((d: { rates?: Record<string, number> }) => {
         if (cancelled) return;
         const next = Number(d.rates?.[currency]);
-        if (Number.isFinite(next) && next > 0) setRate(next);
-        else setRate(1);
+        if (!Number.isFinite(next) || next <= 0) throw new Error("Currency rate unavailable");
+        setRate(next);
       })
       .catch(() => { if (!cancelled) setRate(1); })
       .finally(() => { if (!cancelled) setRateLoading(false); });
@@ -51,8 +51,6 @@ export function BalanceCard({ portfolio, loading = false }: BalanceCardProps) {
   }).format(value);
 
   function handleCurrencyChange(next: string) {
-    // Update the card immediately and persist locally so the choice survives
-    // even when the preferences row is temporarily unavailable.
     setCurrency(next);
     localStorage.setItem("smartchain_display_currency", next);
   }
