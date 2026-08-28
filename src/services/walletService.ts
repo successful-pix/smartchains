@@ -11,37 +11,20 @@ import type {
 /** All database access for wallet data. RLS scopes every row to the signed-in user. */
 
 export async function getHoldings(): Promise<WalletHolding[]> {
-  const { data, error } = await supabase
-    .from("wallet_holdings")
-    .select("id, asset_id, symbol, balance");
-
+  const { data, error } = await supabase.from("wallet_holdings").select("id, asset_id, symbol, balance");
   if (error) {
     console.warn("[wallet] wallet_holdings unavailable; using zero balances", error.message);
     return [];
   }
-
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    asset_id: row.asset_id,
-    symbol: row.symbol,
-    balance: Number(row.balance),
-  }));
+  return (data ?? []).map((row) => ({ id: row.id, asset_id: row.asset_id, symbol: row.symbol, balance: Number(row.balance) }));
 }
 
 export async function getTransactions(limit = 50): Promise<WalletTransaction[]> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  // Recent activity is optional dashboard data. A missing table, stale schema
-  // cache, or RLS/permission issue must never make the Assets list fail.
+  const { data, error } = await supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(limit);
   if (error) {
     console.warn("[wallet] transactions unavailable; showing empty activity", error.message);
     return [];
   }
-
   return (data ?? []).map((row) => ({
     id: row.id,
     type: row.type as TransactionType,
@@ -74,42 +57,31 @@ export async function createTransactionRequest(input: NewTransaction) {
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
   if (!userId) throw new Error("You must be signed in.");
-
-  const { data, error } = await supabase
-    .from("transactions")
-    .insert({
-      user_id: userId,
-      type: input.type,
-      asset_id: input.asset_id,
-      symbol: input.symbol,
-      amount: input.amount,
-      fiat_value: input.fiat_value,
-      status: "pending",
-      is_onchain: false,
-      counterparty: input.counterparty ?? null,
-      network: input.network ?? null,
-      note: input.note ?? null,
-    })
-    .select("reference")
-    .single();
+  const { data, error } = await supabase.from("transactions").insert({
+    user_id: userId,
+    type: input.type,
+    asset_id: input.asset_id,
+    symbol: input.symbol,
+    amount: input.amount,
+    fiat_value: input.fiat_value,
+    status: "pending",
+    is_onchain: false,
+    counterparty: input.counterparty ?? null,
+    network: input.network ?? null,
+    note: input.note ?? null,
+  }).select("reference").single();
   if (error) throw new Error(error.message);
-
   await supabase.from("notifications").insert({
     user_id: userId,
     category: "transaction",
     title: `${input.type[0]!.toUpperCase()}${input.type.slice(1)} request created`,
     body: `${input.amount} ${input.symbol} · reference ${data.reference}. Pending — not broadcast to a blockchain network.`,
   });
-
   return data.reference as string;
 }
 
 export async function getNotifications(): Promise<AppNotification[]> {
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const { data, error } = await supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50);
   if (error) {
     console.warn("[wallet] notifications unavailable", error.message);
     return [];
@@ -128,10 +100,7 @@ export async function markAllNotificationsRead() {
 }
 
 export async function getProfile(): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, display_name, avatar_url")
-    .maybeSingle();
+  const { data, error } = await supabase.from("profiles").select("id, display_name, avatar_url").maybeSingle();
   if (error) throw new Error(error.message);
   return data as Profile | null;
 }
@@ -144,7 +113,9 @@ export async function updateProfile(patch: { display_name?: string }) {
 }
 
 export async function getPreferences(): Promise<UserPreferences | null> {
-  const { data, error } = await supabase.from("user_preferences").select("*").maybeSingle();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+  const { data, error } = await supabase.from("user_preferences").select("*").eq("user_id", auth.user.id).maybeSingle();
   if (error) throw new Error(error.message);
   return data as UserPreferences | null;
 }
@@ -152,9 +123,9 @@ export async function getPreferences(): Promise<UserPreferences | null> {
 export async function updatePreferences(patch: Partial<UserPreferences>) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("You must be signed in.");
-  const { error } = await supabase
-    .from("user_preferences")
-    .update(patch)
-    .eq("user_id", auth.user.id);
+  const { error } = await supabase.from("user_preferences").upsert({
+    user_id: auth.user.id,
+    ...patch,
+  }, { onConflict: "user_id" });
   if (error) throw new Error(error.message);
 }
