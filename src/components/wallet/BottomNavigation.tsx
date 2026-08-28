@@ -5,7 +5,7 @@ interface NavTab { id: string; label: string; icon: LucideIcon; href: string; }
 const tabs: NavTab[] = [
   { id: "home", label: "Home", icon: Home, href: "/" },
   { id: "markets", label: "Markets", icon: LineChart, href: "/markets" },
-  { id: "trade", label: "Trade", icon: CandlestickChart, href: "/swap" },
+  { id: "trade", label: "Trade", icon: CandlestickChart, href: "/trade" },
   { id: "wallet", label: "Wallet", icon: Wallet, href: "/wallet" },
   { id: "account", label: "Account", icon: User, href: "/account" },
 ];
