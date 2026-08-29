@@ -14,7 +14,7 @@ function Trade() {
     <section className="mt-5 overflow-hidden rounded-2xl border border-border bg-card">
       {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading listed coins…</p> : error ? <p className="p-5 text-sm text-destructive">{(error as Error).message}</p> : markets.map((market) => <Link key={market.id} to="/asset/$assetId" params={{ assetId: market.id }} className="flex items-center gap-3 border-b border-border p-4 last:border-b-0 hover:bg-secondary">
         <img src={market.image} alt="" className="size-10 rounded-full" />
-        <span className="min-w-0 flex-1"><b className="block truncate">{market.name}</b><span className="text-xs uppercase text-muted-foreground">{market.symbol}/USD</span></span>
+        <span className="min-w-0 flex-1"><b className="block truncate">{market.name}</b><span className="text-xs uppercase text-muted-foreground">{market.symbol}/USDT</span></span>
         <span className="text-right"><b className="block">{formatFiat(market.price)}</b><span className={`text-xs ${market.changePercent24h >= 0 ? "text-success" : "text-destructive"}`}>{market.changePercent24h >= 0 ? "+" : ""}{market.changePercent24h.toFixed(2)}%</span></span>
         <ChevronRight size={18} className="text-muted-foreground" />
       </Link>)}
