@@ -1,10 +1,11 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createTransactionRequest, getHoldings, getNotifications, getPreferences, getProfile, getTransactions, markAllNotificationsRead, markNotificationRead, type NewTransaction } from "@/services/walletService";
+import { createTransactionRequest, getHoldings, getNotifications, getPreferences, getProfile, getTransactions, markAllNotificationsRead, markNotificationRead, subscribeToHoldings, type NewTransaction } from "@/services/walletService";
 import { useMarkets } from "./useMarkets";
 import { SUPPORTED_ASSETS } from "@/data/assets";
 import type { AssetPosition, PortfolioSummary } from "@/types/wallet";
 const FAST_STALE_MS=5_000;
-export function useHoldings(){return useQuery({queryKey:["holdings"],queryFn:getHoldings,staleTime:FAST_STALE_MS,refetchOnWindowFocus:true,refetchInterval:3_000});}
+export function useHoldings(){const qc=useQueryClient();const query=useQuery({queryKey:["holdings"],queryFn:getHoldings,staleTime:FAST_STALE_MS,refetchOnWindowFocus:true,refetchInterval:3_000});useEffect(()=>subscribeToHoldings(()=>{void qc.invalidateQueries({queryKey:["holdings"]});}),[qc]);return query;}
 export function useTransactions(limit=50){return useQuery({queryKey:["transactions",limit],queryFn:()=>getTransactions(limit),staleTime:FAST_STALE_MS,refetchOnWindowFocus:true,refetchInterval:5_000});}
 export function useNotifications(){const query=useQuery({queryKey:["notifications"],queryFn:getNotifications,staleTime:FAST_STALE_MS,refetchOnWindowFocus:true,refetchInterval:5_000});const unread=(query.data??[]).filter(n=>!n.read).length;return {...query,notifications:query.data??[],unread};}
 export function useNotificationActions(){const qc=useQueryClient();const invalidate=()=>qc.invalidateQueries({queryKey:["notifications"]});return{markRead:useMutation({mutationFn:markNotificationRead,onSuccess:invalidate}),markAllRead:useMutation({mutationFn:markAllNotificationsRead,onSuccess:invalidate})};}
