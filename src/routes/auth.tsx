@@ -4,108 +4,16 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { loadCountries, type Country } from "@/data/countries";
-
 export const Route = createFileRoute("/auth")({ component: Auth });
 type Mode = "login" | "signup" | "verify" | "reset";
-
-function withTimeout<T>(promise: PromiseLike<T>, ms = 15000): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("Authentication is taking too long. Please check your connection and try again.")), ms);
-    Promise.resolve(promise).then(v => { window.clearTimeout(timer); resolve(v); }, e => { window.clearTimeout(timer); reject(e); });
-  });
-}
-
-function Auth() {
-  const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [country, setCountry] = useState("NG");
-  const [countries, setCountries] = useState<Country[]>([]);
-  const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => { void loadCountries().then(setCountries); }, []);
-  const switchMode = (next: Mode) => { setMode(next); setShowPassword(false); setCode(""); };
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (loading) return;
-    setLoading(true);
-    const cleanEmail = email.trim().toLowerCase();
-    try {
-      if (mode === "signup") {
-        const selectedCountry = countries.find(c => c.code === country);
-        if (!fullName.trim() || !phone.trim() || !selectedCountry) throw new Error("Please complete your name, country and phone number.");
-        if (password.length < 6) throw new Error("Password must be at least 6 characters.");
-        const { data, error } = await withTimeout(supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: { data: { display_name: fullName.trim(), full_name: fullName.trim(), phone: phone.trim(), country: selectedCountry.name, country_iso: selectedCountry.code } }
-        }));
-        if (error) throw error;
-        if (!data.user) throw new Error("SmartChain could not create the account. Please try again.");
-        setEmail(cleanEmail);
-        setCode("");
-        setMode("verify");
-        toast.success("Account created. Enter the verification code sent to your email.");
-        return;
-      }
-      if (mode === "verify") {
-        if (code.length !== 6) throw new Error("Enter the 6-digit verification code.");
-        const { data, error } = await withTimeout(supabase.auth.verifyOtp({ email: cleanEmail, token: code, type: "signup" }));
-        if (error) throw error;
-        if (!data.session) {
-          const login = await withTimeout(supabase.auth.signInWithPassword({ email: cleanEmail, password }));
-          if (login.error || !login.data.session) throw (login.error || new Error("Verification succeeded but login could not be completed."));
-        }
-        toast.success("Email verified successfully");
-        await navigate({ to: "/", replace: true });
-        return;
-      }
-      if (mode === "login") {
-        const { data, error } = await withTimeout(supabase.auth.signInWithPassword({ email: cleanEmail, password }));
-        if (error) {
-          if (/email\s*not\s*confirmed|confirm.*email/i.test(error.message)) {
-            setMode("verify");
-            setEmail(cleanEmail);
-            setCode("");
-            const resend = await withTimeout(supabase.auth.resend({ type: "signup", email: cleanEmail }));
-            if (resend.error) throw resend.error;
-            toast.info("Your email is not verified. A new verification code was sent.");
-            return;
-          }
-          throw error;
-        }
-        if (!data.session) throw new Error("Login session was not created. Please try again.");
-        toast.success("Welcome back to SmartChain");
-        await navigate({ to: "/", replace: true });
-        return;
-      }
-      const { error } = await withTimeout(supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: `${window.location.origin}/auth?reset=1` }));
-      if (error) throw error;
-      toast.success("Password reset instructions sent to your email");
-      setMode("login");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to continue. Please try again.");
-    } finally { setLoading(false); }
-  }
-
-  async function resendCode() {
-    if (!email.trim() || loading) return;
-    setLoading(true);
-    try {
-      const { error } = await withTimeout(supabase.auth.resend({ type: "signup", email: email.trim().toLowerCase() }));
-      if (error) throw error;
-      toast.success("A new 6-digit verification code was sent.");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to resend the code."); }
-    finally { setLoading(false); }
-  }
-
-  const title = mode === "login" ? "Welcome back" : mode === "signup" ? "Welcome to SmartChain" : mode === "verify" ? "Verify your email" : "Reset your password";
-  const subtitle = mode === "signup" ? "Create your wallet" : mode === "verify" ? "Enter the code sent to your email" : "Securely access your wallet dashboard and portfolio";
-  return <main className="mx-auto grid min-h-screen max-w-lg place-items-center px-4 py-8"><section className="w-full rounded-3xl border border-border bg-card p-6 shadow-lg"><div className="mb-7 text-center"><img src="/smartchain-logo.svg" alt="SmartChain" className="mx-auto size-12 rounded-2xl"/><h1 className="mt-4 text-2xl font-semibold">{title}</h1><p className="mt-2 text-sm text-muted-foreground">{subtitle}</p></div>{mode === "verify" ? <form onSubmit={e => void submit(e)} className="space-y-4"><p className="text-sm text-muted-foreground">We sent a 6-digit verification code to <b className="text-foreground">{email}</b>.</p><label className="block text-sm font-medium">Verification code<input required minLength={6} maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 text-center text-xl tracking-[0.4em]" placeholder="000000"/></label><button disabled={loading || code.length !== 6} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading ? "Verifying…" : "Verify email"}</button><button type="button" disabled={loading} onClick={() => void resendCode()} className="w-full rounded-xl border px-4 py-3 text-sm font-semibold">Resend code</button><button type="button" onClick={() => switchMode("login")} className="w-full text-sm text-muted-foreground">Back to sign in</button></form> : <><div className="mb-6 grid grid-cols-2 rounded-xl bg-secondary p-1"><button type="button" onClick={() => switchMode("login")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode === "login" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Sign in</button><button type="button" onClick={() => switchMode("signup")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode === "signup" ? "bg-background shadow-sm" : "text-muted-foreground"}`}>Create account</button></div><form onSubmit={e => void submit(e)} className="space-y-4">{mode === "signup" && <><label className="block text-sm font-medium">Full name<input required value={fullName} onChange={e => setFullName(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Your full name"/></label><label className="block text-sm font-medium">Country<select required value={country} onChange={e => setCountry(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{countries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}</select></label><label className="block text-sm font-medium">Phone number<input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Phone number"/></label></>}<label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="you@example.com"/></label>{mode === "login" || mode === "signup" ? <label className="block text-sm font-medium">Password<span className="relative mt-1.5 block"><input required minLength={6} type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-3 pr-11" placeholder="At least 6 characters"/><button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground" aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></span></label> : <p className="rounded-xl bg-secondary p-3 text-sm text-muted-foreground">Enter your account email and we will send password reset instructions.</p>}<button disabled={loading} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading ? "Please wait…" : mode === "login" ? "Sign in" : mode === "signup" ? "Create account" : "Send reset email"}</button></form>{mode === "login" && <button type="button" onClick={() => switchMode("reset")} className="mt-4 w-full text-sm text-muted-foreground">Forgot password?</button>}</>}</section></main>;
-}
+function withTimeout<T>(promise: PromiseLike<T>, ms=15000):Promise<T>{return new Promise((resolve,reject)=>{const timer=window.setTimeout(()=>reject(new Error("Authentication is taking too long. Please check your connection and try again.")),ms);Promise.resolve(promise).then(v=>{window.clearTimeout(timer);resolve(v)},e=>{window.clearTimeout(timer);reject(e)})})}
+function confirmed(user:any){return Boolean(user?.email_confirmed_at||user?.confirmed_at)}
+function Auth(){const navigate=useNavigate();const [mode,setMode]=useState<Mode>("login");const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [showPassword,setShowPassword]=useState(false);const [fullName,setFullName]=useState("");const [phone,setPhone]=useState("");const [country,setCountry]=useState("NG");const [countries,setCountries]=useState<Country[]>([]);const [code,setCode]=useState("");const [loading,setLoading]=useState(false);
+useEffect(()=>{void loadCountries().then(setCountries);if(new URLSearchParams(window.location.search).get("verify")==="1")setMode("verify")},[]);const switchMode=(next:Mode)=>{setMode(next);setShowPassword(false);setCode("")};
+async function submit(event:FormEvent){event.preventDefault();if(loading)return;setLoading(true);const cleanEmail=email.trim().toLowerCase();try{if(mode==="signup"){const selectedCountry=countries.find(c=>c.code===country);if(!fullName.trim()||!phone.trim()||!selectedCountry)throw new Error("Please complete your name, country and phone number.");if(password.length<6)throw new Error("Password must be at least 6 characters.");const {data,error}=await withTimeout(supabase.auth.signUp({email:cleanEmail,password,options:{data:{display_name:fullName.trim(),full_name:fullName.trim(),phone:phone.trim(),country:selectedCountry.name,country_iso:selectedCountry.code}}}));if(error)throw error;if(!data.user)throw new Error("SmartChain could not create the account. Please try again.");setEmail(cleanEmail);setCode("");setMode("verify");toast.success("Account created. Check your email for the 6-digit verification code.");return}
+if(mode==="verify"){if(!/^\d{6}$/.test(code))throw new Error("Enter the 6-digit verification code.");const {data,error}=await withTimeout(supabase.auth.verifyOtp({email:cleanEmail,token:code,type:"signup"}));if(error)throw error;if(!data.session||!confirmed(data.user))throw new Error("Verification is not complete yet. Please enter the latest code from your email.");toast.success("Email verified successfully");await navigate({to:"/",replace:true});return}
+if(mode==="login"){const {data,error}=await withTimeout(supabase.auth.signInWithPassword({email:cleanEmail,password}));if(error){if(/email\s*not\s*confirmed|confirm.*email/i.test(error.message)){setMode("verify");setEmail(cleanEmail);setCode("");const resend=await withTimeout(supabase.auth.resend({type:"signup",email:cleanEmail}));if(resend.error)throw resend.error;toast.info("Your email is not verified. A new verification code was sent.");return}throw error}if(!data.session)throw new Error("Login session was not created. Please try again.");if(!confirmed(data.user)){setMode("verify");setEmail(cleanEmail);const resend=await withTimeout(supabase.auth.resend({type:"signup",email:cleanEmail}));if(resend.error)throw resend.error;toast.info("Verify your email before entering SmartChain.");return}toast.success("Welcome back to SmartChain");await navigate({to:"/",replace:true});return}
+const {error}=await withTimeout(supabase.auth.resetPasswordForEmail(cleanEmail,{redirectTo:`${window.location.origin}/auth?reset=1`}));if(error)throw error;toast.success("Password reset instructions sent to your email");setMode("login")}catch(error){toast.error(error instanceof Error?error.message:"Unable to continue. Please try again.")}finally{setLoading(false)}}
+async function resendCode(){if(!email.trim()||loading)return;setLoading(true);try{const {error}=await withTimeout(supabase.auth.resend({type:"signup",email:email.trim().toLowerCase()}));if(error)throw error;toast.success("A new 6-digit verification code was sent to your email.")}catch(error){toast.error(error instanceof Error?error.message:"Unable to resend the code.")}finally{setLoading(false)}}
+const title=mode==="login"?"Welcome back":mode==="signup"?"Welcome to SmartChain":mode==="verify"?"Verify your email":"Reset your password";const subtitle=mode==="signup"?"Create your wallet":mode==="verify"?"Enter the code sent to your email":"Securely access your wallet dashboard and portfolio";
+return <main className="mx-auto grid min-h-screen max-w-lg place-items-center px-4 py-8"><section className="w-full rounded-3xl border border-border bg-card p-6 shadow-lg"><div className="mb-7 text-center"><img src="/smartchain-logo.svg" alt="SmartChain" className="mx-auto size-12 rounded-2xl"/><h1 className="mt-4 text-2xl font-semibold">{title}</h1><p className="mt-2 text-sm text-muted-foreground">{subtitle}</p></div>{mode==="verify"?<form onSubmit={e=>void submit(e)} className="space-y-4"><p className="text-sm text-muted-foreground">We sent a 6-digit verification code to <b className="text-foreground">{email}</b>.</p><label className="block text-sm font-medium">Verification code<input required minLength={6} maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 text-center text-xl tracking-[0.4em]" placeholder="000000"/></label><button disabled={loading||code.length!==6} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading?"Verifying…":"Verify email"}</button><button type="button" disabled={loading} onClick={()=>void resendCode()} className="w-full rounded-xl border px-4 py-3 text-sm font-semibold">Resend code</button><button type="button" onClick={()=>switchMode("login")} className="w-full text-sm text-muted-foreground">Back to sign in</button></form>:<><div className="mb-6 grid grid-cols-2 rounded-xl bg-secondary p-1"><button type="button" onClick={()=>switchMode("login")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode==="login"?"bg-background shadow-sm":"text-muted-foreground"}`}>Sign in</button><button type="button" onClick={()=>switchMode("signup")} className={`rounded-lg px-3 py-2 text-sm font-medium ${mode==="signup"?"bg-background shadow-sm":"text-muted-foreground"}`}>Create account</button></div><form onSubmit={e=>void submit(e)} className="space-y-4">{mode==="signup"&&<><label className="block text-sm font-medium">Full name<input required value={fullName} onChange={e=>setFullName(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Your full name"/></label><label className="block text-sm font-medium">Country<select required value={country} onChange={e=>setCountry(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3">{countries.map(c=><option key={c.code} value={c.code}>{c.name}</option>)}</select></label><label className="block text-sm font-medium">Phone number<input required type="tel" value={phone} onChange={e=>setPhone(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="Phone number"/></label></>}<label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3" placeholder="you@example.com"/></label>{mode==="login"||mode==="signup"?<label className="block text-sm font-medium">Password<span className="relative mt-1.5 block"><input required minLength={6} type={showPassword?"text":"password"} autoComplete={mode==="login"?"current-password":"new-password"} value={password} onChange={e=>setPassword(e.target.value)} className="w-full rounded-xl border border-border bg-background px-3 py-3 pr-11" placeholder="At least 6 characters"/><button type="button" onClick={()=>setShowPassword(v=>!v)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground" aria-label={showPassword?"Hide password":"Show password"}>{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></span></label>:<p className="rounded-xl bg-secondary p-3 text-sm text-muted-foreground">Enter your account email and we will send password reset instructions.</p>}<button disabled={loading} className="w-full rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-60">{loading?"Please wait…":mode==="login"?"Sign in":mode==="signup"?"Create account":"Send reset email"}</button></form>{mode==="login"&&<button type="button" onClick={()=>switchMode("reset")} className="mt-4 w-full text-sm text-muted-foreground">Forgot password?</button>}</>}</section></main>}
