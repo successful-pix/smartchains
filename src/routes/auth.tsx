@@ -13,23 +13,21 @@ const PENDING_OTP_KEY = "smartchain_pending_otp";
 function withTimeout<T>(promise: PromiseLike<T>, ms = 20000): Promise<T> { return new Promise((resolve, reject) => { const timer = window.setTimeout(() => reject(new Error("The request timed out. Please check your connection and try again.")), ms); Promise.resolve(promise).then(v => { window.clearTimeout(timer); resolve(v); }, e => { window.clearTimeout(timer); reject(e); }); }); }
 function setVerifyUrl(){const url=new URL(window.location.href);url.searchParams.set("verify","1");url.searchParams.delete("reset");window.history.replaceState({},"",url.toString());}
 function clearVerifyState(){sessionStorage.removeItem(OTP_KIND_KEY);sessionStorage.removeItem(OTP_EMAIL_KEY);sessionStorage.removeItem(PENDING_OTP_KEY);}
+function beginOtp(kind:"signup"|"login",target:string){sessionStorage.setItem(OTP_KIND_KEY,kind);sessionStorage.setItem(OTP_EMAIL_KEY,target);sessionStorage.setItem(PENDING_OTP_KEY,"1");setVerifyUrl();}
 function Auth(){
  const navigate=useNavigate();
  const [mode,setMode]=useState<Mode>("login");const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [showPassword,setShowPassword]=useState(false);const [fullName,setFullName]=useState("");const [phone,setPhone]=useState("");const [country,setCountry]=useState("NG");const [countries,setCountries]=useState<Country[]>([]);const [code,setCode]=useState("");const [newPassword,setNewPassword]=useState("");const [confirmPassword,setConfirmPassword]=useState("");const [loading,setLoading]=useState(false);
  useEffect(()=>{void loadCountries().then(setCountries).catch(()=>setCountries([]));const params=new URLSearchParams(window.location.search);if(params.get("verify")==="1")setMode("verify");if(params.get("reset")==="1")setMode("reset");const savedEmail=sessionStorage.getItem(OTP_EMAIL_KEY);const savedKind=sessionStorage.getItem(OTP_KIND_KEY);if(savedEmail&&savedKind){setEmail(savedEmail);setMode("verify");setVerifyUrl();}},[]);
  const switchMode=(next:Mode)=>{if(next!=="verify")clearVerifyState();setCode("");setShowPassword(false);const url=new URL(window.location.href);url.searchParams.delete("verify");url.searchParams.delete("reset");if(next==="reset")url.searchParams.set("reset","request");window.history.replaceState({},"",url.toString());setMode(next);};
- function beginOtp(kind:"signup"|"login",target:string){sessionStorage.setItem(OTP_KIND_KEY,kind);sessionStorage.setItem(OTP_EMAIL_KEY,target);sessionStorage.setItem(PENDING_OTP_KEY,"1");setEmail(target);setCode("");setVerifyUrl();setMode("verify");}
- async function sendLoginCode(target:string){const {error}=await withTimeout(supabase.auth.signInWithOtp({email:target,options:{shouldCreateUser:false,shouldSendEmail:true}}));if(error)throw error;beginOtp("login",target);}
- async function sendSignupCode(target:string){const {error}=await withTimeout(supabase.auth.resend({type:"signup",email:target}));if(error)throw error;beginOtp("signup",target);}
+ async function sendLoginCode(target:string){const {error}=await withTimeout(supabase.auth.signInWithOtp({email:target,options:{shouldCreateUser:false,shouldSendEmail:true}}));if(error)throw error;beginOtp("login",target);setEmail(target);setMode("verify");}
+ async function sendSignupCode(target:string){const {error}=await withTimeout(supabase.auth.resend({type:"signup",email:target}));if(error)throw error;beginOtp("signup",target);setEmail(target);setMode("verify");}
  async function submit(event:FormEvent){event.preventDefault();if(loading)return;setLoading(true);const clean=email.trim().toLowerCase();try{
   if(!clean)throw new Error("Enter your email address.");
   if(mode==="signup"){
    const selected=countries.find(c=>c.code===country);if(!fullName.trim()||!phone.trim()||!selected)throw new Error("Please complete your full name, country and phone number.");if(password.length<6)throw new Error("Password must be at least 6 characters.");
-   // Set the pending state BEFORE signup so the global auth listener cannot redirect to the dashboard when Supabase emits SIGNED_IN.
-   sessionStorage.setItem(OTP_KIND_KEY,"signup");sessionStorage.setItem(OTP_EMAIL_KEY,clean);sessionStorage.setItem(PENDING_OTP_KEY,"1");
+   beginOtp("signup",clean);
    const {data,error}=await withTimeout(supabase.auth.signUp({email:clean,password,options:{data:{display_name:fullName.trim(),full_name:fullName.trim(),phone:phone.trim(),country:selected.name,country_iso:selected.code}}}));
    if(error){clearVerifyState();if(/already registered|already exists|user already/i.test(error.message))throw new Error("This email is already registered. Please sign in instead.");throw error;}
-   // Supabase can intentionally return a user without identities for an already-registered email to prevent enumeration.
    if(data.user && Array.isArray(data.user.identities) && data.user.identities.length===0){clearVerifyState();throw new Error("This email is already registered. Please sign in instead.");}
    if(!data.user){clearVerifyState();throw new Error("Account creation failed. Please try again.");}
    setEmail(clean);setCode("");setVerifyUrl();setMode("verify");toast.success("Account created. Check your email for the 6-digit verification code.");return;
@@ -38,7 +36,7 @@ function Auth(){
    if(password.length<6)throw new Error("Enter your password.");const {data,error}=await withTimeout(supabase.auth.signInWithPassword({email:clean,password}));
    if(error){if(/email\s*not\s*confirmed|confirm.*email/i.test(error.message)){setEmail(clean);setCode("");await sendSignupCode(clean);toast.info("Your email is not verified. A new verification code was sent.");return;}throw error;}
    if(!data.user||!data.session)throw new Error("Login could not be completed. Please check your email and password.");
-   await supabase.auth.signOut();setEmail(clean);setCode("");await sendLoginCode(clean);toast.success("A login verification code was sent to your email.");return;
+   await supabase.auth.signOut();await sendLoginCode(clean);toast.success("A login verification code was sent to your email.");return;
   }
   if(mode==="verify"){
    if(!/^\d{6}$/.test(code))throw new Error("Enter the 6-digit verification code.");const kind=sessionStorage.getItem(OTP_KIND_KEY)==="signup"?"signup":"login";
