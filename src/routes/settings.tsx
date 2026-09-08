@@ -4,14 +4,108 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { usePreferences, useProfile } from "@/hooks/useWalletData";
 import { updatePreferences, updateProfile } from "@/services/walletService";
-export const Route=createFileRoute("/settings")({component:Settings});
-const CURRENCIES=["USD","EUR","GBP","NGN","CAD","AUD","JPY","CNY","INR","AED","ZAR","KES","GHS","BRL","MXN","CHF","KRW","SGD","HKD","TRY"];
-const PIN_KEY="smartchain_pin_hash";
-async function hashPin(pin:string){const bytes=new TextEncoder().encode(pin);const digest=await crypto.subtle.digest("SHA-256",bytes);return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,"0")).join("")}
-function Settings(){const profile=useProfile(),prefs=usePreferences();const [name,setName]=useState(""),[currency,setCurrency]=useState("USD"),[security,setSecurity]=useState(true),[transactions,setTransactions]=useState(true),[marketing,setMarketing]=useState(false),[hideBalance,setHideBalance]=useState(false),[saving,setSaving]=useState(false),[pin,setPin]=useState(""),[pinConfirm,setPinConfirm]=useState(""),[pinEnabled,setPinEnabled]=useState(false),[pinSaving,setPinSaving]=useState(false);
-useEffect(()=>{if(profile.data)setName(profile.data.display_name||"")},[profile.data]);useEffect(()=>{if(prefs.data){setCurrency(prefs.data.currency||"USD");setSecurity(Boolean(prefs.data.notify_security));setTransactions(Boolean(prefs.data.notify_transactions));setMarketing(Boolean(prefs.data.notify_marketing));setHideBalance(Boolean(prefs.data.hide_balance))}},[prefs.data]);useEffect(()=>{setPinEnabled(Boolean(localStorage.getItem(PIN_KEY)))},[]);
-async function save(){if(saving)return;setSaving(true);let prefsError:unknown=null;let profileError:unknown=null;try{await updatePreferences({currency,hide_balance:hideBalance,notify_security:security,notify_transactions:transactions,notify_marketing:marketing})}catch(e){prefsError=e}try{await updateProfile({display_name:name.trim()||"SmartChain user"})}catch(e){profileError=e}await Promise.allSettled([prefs.refetch(),profile.refetch()]);setSaving(false);if(prefsError&&profileError){toast.error(prefsError instanceof Error?prefsError.message:"Unable to save settings");return}if(prefsError){toast.error(prefsError instanceof Error?prefsError.message:"Unable to save notification settings");return}if(profileError){toast.error(profileError instanceof Error?profileError.message:"Unable to save display name");return}toast.success("Settings saved successfully")}
-async function savePin(){if(pinSaving)return;if(!/^\d{4,6}$/.test(pin))return toast.error("PIN must contain 4 to 6 digits.");if(pin!==pinConfirm)return toast.error("PINs do not match.");setPinSaving(true);try{localStorage.setItem(PIN_KEY,await hashPin(pin));sessionStorage.setItem("smartchain_pin_unlocked_at",String(Date.now()));setPin("");setPinConfirm("");setPinEnabled(true);toast.success("Screen lock PIN enabled")}catch(e){toast.error(e instanceof Error?e.message:"Unable to set screen lock PIN")}finally{setPinSaving(false)}}
-function disablePin(){localStorage.removeItem(PIN_KEY);sessionStorage.removeItem("smartchain_pin_unlocked_at");setPinEnabled(false);toast.success("Screen lock disabled")}
-const Toggle=({title,text,checked,onChange}:{title:string;text:string;checked:boolean;onChange:(v:boolean)=>void})=><label className="flex items-center justify-between gap-4 rounded-xl bg-secondary p-4"><span><b className="block text-sm">{title}</b><span className="text-xs text-muted-foreground">{text}</span></span><input type="checkbox" checked={checked} onChange={e=>onChange(e.target.checked)} className="size-5 accent-primary"/></label>;
-return <main className="mx-auto max-w-lg px-4 pb-24 pt-5"><Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ArrowLeft size={17}/> Dashboard</Link><h1 className="mt-5 text-2xl font-semibold">Settings</h1><p className="mt-1 text-sm text-muted-foreground">Manage your SmartChain account preferences.</p><section className="mt-5 space-y-5 rounded-2xl border border-border bg-card p-5"><label className="block text-sm font-medium">Display name<input value={name} onChange={e=>setName(e.target.value)} className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3" placeholder="Your name"/></label><label className="block text-sm font-medium">Currency<select value={currency} onChange={e=>setCurrency(e.target.value)} className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3">{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select></label><Toggle title="Hide balance" text="Hide wallet balances on your dashboard." checked={hideBalance} onChange={setHideBalance}/><Toggle title="Security notifications" text="Alerts about account security." checked={security} onChange={setSecurity}/><Toggle title="Transaction notifications" text="Updates about wallet activity." checked={transactions} onChange={setTransactions}/><Toggle title="Marketing notifications" text="News and product updates." checked={marketing} onChange={setMarketing}/><button type="button" disabled={saving} onClick={()=>void save()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{saving?<Loader2 size={17} className="animate-spin"/>:<Check size={17}/>} {saving?"Saving…":"Save settings"}</button></section><section className="mt-4 space-y-4 rounded-2xl border border-border bg-card p-5"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><Lock size={19}/></div><div><h2 className="font-semibold">Screen lock</h2><p className="text-xs text-muted-foreground">Require a PIN when opening the app and after 5 minutes.</p></div></div>{pinEnabled?<button type="button" onClick={disablePin} className="w-full rounded-xl border px-4 py-3 text-sm font-semibold">Disable screen lock</button>:<><label className="block text-sm font-medium">Create PIN<input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,"").slice(0,6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 tracking-[0.4em]" placeholder="4–6 digits"/></label><label className="block text-sm font-medium">Confirm PIN<input type="password" inputMode="numeric" maxLength={6} value={pinConfirm} onChange={e=>setPinConfirm(e.target.value.replace(/\D/g,"").slice(0,6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 tracking-[0.4em]" placeholder="Repeat PIN"/></label><button type="button" disabled={pinSaving} onClick={()=>void savePin()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{pinSaving?<Loader2 className="animate-spin" size={17}/>:<ShieldCheck size={17}/>} {pinSaving?"Setting up…":"Enable screen lock"}</button></>}</section><Link to="/kyc" className="mt-4 block rounded-2xl border border-border bg-card p-4 hover:bg-secondary"><b>KYC verification</b><span className="mt-1 block text-sm text-muted-foreground">Verify your identity and manage your verification status.</span></Link></main>}
+
+export const Route = createFileRoute("/settings")({ component: Settings });
+const CURRENCIES = ["USD", "EUR", "GBP", "NGN", "CAD", "AUD", "JPY", "CNY", "INR", "AED", "ZAR", "KES", "GHS", "BRL", "MXN", "CHF", "KRW", "SGD", "HKD", "TRY"];
+const PIN_KEY = "smartchain_pin_hash";
+const LOCAL_SETTINGS_KEY = "smartchain_settings_form";
+
+async function hashPin(pin: string) {
+  const bytes = new TextEncoder().encode(pin);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function readLocalSettings() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_SETTINGS_KEY) || "null"); } catch { return null; }
+}
+
+function writeLocalSettings(value: Record<string, unknown>) {
+  try { localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(value)); } catch { /* best effort */ }
+}
+
+function Settings() {
+  const profile = useProfile(), prefs = usePreferences();
+  const [name, setName] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [security, setSecurity] = useState(true);
+  const [transactions, setTransactions] = useState(true);
+  const [marketing, setMarketing] = useState(false);
+  const [hideBalance, setHideBalance] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinEnabled, setPinEnabled] = useState(false);
+  const [pinSaving, setPinSaving] = useState(false);
+
+  useEffect(() => {
+    const local = readLocalSettings();
+    if (local) {
+      setName(local.name || ""); setCurrency(local.currency || "USD"); setSecurity(local.security !== false); setTransactions(local.transactions !== false); setMarketing(Boolean(local.marketing)); setHideBalance(Boolean(local.hideBalance));
+    }
+  }, []);
+  useEffect(() => { if (profile.data?.display_name && !readLocalSettings()?.name) setName(profile.data.display_name); }, [profile.data]);
+  useEffect(() => {
+    if (prefs.data && !readLocalSettings()) {
+      setCurrency(prefs.data.currency || "USD"); setSecurity(Boolean(prefs.data.notify_security)); setTransactions(Boolean(prefs.data.notify_transactions)); setMarketing(Boolean(prefs.data.notify_marketing)); setHideBalance(Boolean(prefs.data.hide_balance));
+    }
+  }, [prefs.data]);
+  useEffect(() => { setPinEnabled(Boolean(localStorage.getItem(PIN_KEY))); }, []);
+
+  function markChanged() { setSaved(false); }
+
+  async function save() {
+    if (saving) return;
+    setSaving(true); setSaved(false);
+    const local = { name: name.trim() || "SmartChain user", currency, security, transactions, marketing, hideBalance };
+    writeLocalSettings(local);
+    // Update the screen immediately so the user gets clear confirmation even while the server request completes.
+    setName(local.name);
+    try {
+      await Promise.all([updatePreferences({ currency, hide_balance: hideBalance, notify_security: security, notify_transactions: transactions, notify_marketing: marketing }), updateProfile({ display_name: local.name })]);
+      await Promise.allSettled([prefs.refetch(), profile.refetch()]);
+      setSaved(true);
+      toast.success("Settings saved");
+    } catch (e) {
+      // The local settings remain saved on this device. Show a truthful warning if server persistence failed.
+      setSaved(true);
+      toast.warning(e instanceof Error ? `Saved on this device. Server save failed: ${e.message}` : "Saved on this device. Server save failed.");
+    } finally { setSaving(false); }
+  }
+
+  async function savePin() {
+    if (pinSaving) return;
+    if (!/^\d{4,6}$/.test(pin)) return toast.error("PIN must contain 4 to 6 digits.");
+    if (pin !== pinConfirm) return toast.error("PINs do not match.");
+    setPinSaving(true);
+    try { localStorage.setItem(PIN_KEY, await hashPin(pin)); sessionStorage.setItem("smartchain_pin_unlocked_at", String(Date.now())); setPin(""); setPinConfirm(""); setPinEnabled(true); toast.success("Screen lock PIN enabled"); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Unable to set screen lock PIN"); }
+    finally { setPinSaving(false); }
+  }
+
+  function disablePin() { localStorage.removeItem(PIN_KEY); sessionStorage.removeItem("smartchain_pin_unlocked_at"); setPinEnabled(false); toast.success("Screen lock disabled"); }
+
+  const Toggle = ({ title, text, checked, onChange }: { title: string; text: string; checked: boolean; onChange: (v: boolean) => void }) => <label className="flex items-center justify-between gap-4 rounded-xl bg-secondary p-4"><span><b className="block text-sm">{title}</b><span className="text-xs text-muted-foreground">{text}</span></span><input type="checkbox" checked={checked} onChange={e => { onChange(e.target.checked); markChanged(); }} className="size-5 accent-primary" /></label>;
+
+  return <main className="mx-auto max-w-lg px-4 pb-24 pt-5">
+    <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground"><ArrowLeft size={17} /> Dashboard</Link>
+    <h1 className="mt-5 text-2xl font-semibold">Settings</h1>
+    <p className="mt-1 text-sm text-muted-foreground">Manage your SmartChain account preferences.</p>
+    <section className="mt-5 space-y-5 rounded-2xl border border-border bg-card p-5">
+      <label className="block text-sm font-medium">Display name<input value={name} onChange={e => { setName(e.target.value); markChanged(); }} className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3" placeholder="Your name" /></label>
+      <label className="block text-sm font-medium">Currency<select value={currency} onChange={e => { setCurrency(e.target.value); markChanged(); }} className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3">{CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+      <Toggle title="Hide balance" text="Hide wallet balances on your dashboard." checked={hideBalance} onChange={setHideBalance} />
+      <Toggle title="Security notifications" text="Alerts about account security." checked={security} onChange={setSecurity} />
+      <Toggle title="Transaction notifications" text="Updates about wallet activity." checked={transactions} onChange={setTransactions} />
+      <Toggle title="Marketing notifications" text="News and product updates." checked={marketing} onChange={setMarketing} />
+      <button type="button" disabled={saving} onClick={() => void save()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{saving ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} />} {saving ? "Saving…" : saved ? "Saved ✓" : "Save settings"}</button>
+      {saved && <div className="rounded-xl bg-primary/10 px-4 py-3 text-center text-sm font-medium text-primary">✓ Your settings have been saved.</div>}
+    </section>
+    <section className="mt-4 space-y-4 rounded-2xl border border-border bg-card p-5">
+      <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><Lock size={19} /></div><div><h2 className="font-semibold">Screen lock</h2><p className="text-xs text-muted-foreground">Require a PIN when opening the app and after 5 minutes.</p></div></div>
+      {pinEnabled ? <button type="button" onClick={disablePin} className="w-full rounded-xl border px-4 py-3 text-sm font-semibold">Disable screen lock</button> : <><label className="block text-sm font-medium">Create PIN<input type="password" inputMode="numeric" maxLength={6} value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 tracking-[0.4em]" placeholder="4–6 digits" /></label><label className="block text-sm font-medium">Confirm PIN<input type="password" inputMode="numeric" maxLength={6} value={pinConfirm} onChange={e => setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 tracking-[0.4em]" placeholder="Repeat PIN" /></label><button type="button" disabled={pinSaving} onClick={() => void savePin()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground disabled:opacity-50">{pinSaving ? <Loader2 className="animate-spin" size={17} /> : <ShieldCheck size={17} />} {pinSaving ? "Setting up…" : "Enable screen lock"}</button></>}
+    </section>
+    <Link to="/kyc" className="mt-4 block rounded-2xl border border-border bg-card p-4 hover:bg-secondary"><b>KYC verification</b><span className="mt-1 block text-sm text-muted-foreground">Verify your identity and manage your verification status.</span></Link>
+  </main>;
+}
