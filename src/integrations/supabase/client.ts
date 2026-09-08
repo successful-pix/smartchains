@@ -29,7 +29,6 @@ function createSupabaseClient() {
     auth: { storage: brokeredPreviewStorage(), persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
 
-  // Credit emails are triggered only after admin_adjust_balance succeeds.
   const originalRpc = client.rpc.bind(client);
   (client as unknown as { rpc: (...args: unknown[]) => Promise<any> }).rpc = async (...rpcArgs: unknown[]) => {
     const [functionName, args] = rpcArgs as [string, Record<string, unknown> | undefined, unknown?];
@@ -40,7 +39,7 @@ function createSupabaseClient() {
       const amount = String(args.delta ?? '');
       const symbol = String(args.target_symbol ?? '');
       if (targetUser && amount && symbol) {
-        void client.functions.invoke('notify-user', {
+        const { error: notificationError } = await client.functions.invoke('notify-user', {
           body: {
             type: 'credit',
             user_id: targetUser,
@@ -49,9 +48,11 @@ function createSupabaseClient() {
             action_url: `${window.location.origin}/`,
             action_label: 'View Wallet',
           },
-        }).then(({ error }) => {
-          if (error) console.error('[SmartChain] Credit email notification failed:', error);
         });
+        if (notificationError) {
+          console.error('[SmartChain] Credit email notification failed:', notificationError);
+          throw new Error(`Wallet credited, but email notification failed: ${notificationError.message}`);
+        }
       }
     }
 
