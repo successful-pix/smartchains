@@ -9,8 +9,8 @@ const fallbackMarkets: MarketAsset[] = SUPPORTED_ASSETS.map((asset) => ({ id: as
 export function useMarkets() {
   const query = useQuery({
     queryKey: ["markets"],
-    initialData: fallbackMarkets,
-    queryFn: async () => { try { const markets = await fetchMarkets(); return markets.length ? markets : fallbackMarkets; } catch { return fallbackMarkets; } },
+    placeholderData: fallbackMarkets,
+    queryFn: async () => { const markets = await fetchMarkets(); if (!markets.length) throw new Error("No market prices available"); return markets; },
     refetchInterval: REFRESH_MS,
     staleTime: 10_000,
     retry: 2,
