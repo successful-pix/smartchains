@@ -11,14 +11,12 @@ function readCachedPreferences(): CachedPreferences | null {
     const raw = window.localStorage.getItem(PREFERENCES_CACHE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as CachedPreferences;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function cachePreferences(preferences: CachedPreferences) {
   if (typeof window === "undefined") return;
-  try { window.localStorage.setItem(PREFERENCES_CACHE_KEY, JSON.stringify(preferences)); } catch { /* local cache is best-effort */ }
+  try { window.localStorage.setItem(PREFERENCES_CACHE_KEY, JSON.stringify(preferences)); } catch { /* best effort */ }
 }
 
 export async function getHoldings(): Promise<WalletHolding[]> { const { data, error } = await supabase.from("wallet_holdings").select("id, asset_id, symbol, balance"); if (error) throw new Error(error.message); return (data ?? []).map((row) => ({ id: row.id, asset_id: row.asset_id, symbol: row.symbol, balance: Number(row.balance) })); }
@@ -33,6 +31,15 @@ export async function getNotifications(): Promise<AppNotification[]> { const { d
 export async function markNotificationRead(id:string){const{error}=await supabase.from("notifications").update({read:true}).eq("id",id);if(error)throw new Error(error.message)}
 export async function markAllNotificationsRead(){const{error}=await supabase.from("notifications").update({read:true}).eq("read",false);if(error)throw new Error(error.message)}
 export async function getProfile():Promise<Profile|null>{const{data,error}=await supabase.from("profiles").select("id, display_name, avatar_url, account_status").maybeSingle();if(error)throw new Error(error.message);return data as Profile|null}
-export async function updateProfile(patch:{display_name?:string}){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const{data,error}=await supabase.from("profiles").update(patch).eq("id",auth.user.id).select("id").maybeSingle();if(error)throw new Error(`Unable to save display name: ${error.message}`);if(!data)throw new Error("Your profile could not be updated. Please sign in again.");}
+export async function updateProfile(patch:{display_name?:string}){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const{data,error}=await supabase.from("profiles").upsert({id:auth.user.id,...patch},{onConflict:"id",ignoreDuplicates:false}).select("id, display_name, avatar_url, account_status").single();if(error)throw new Error(`Unable to save display name: ${error.message}`);if(!data)throw new Error("Your profile could not be updated. Please sign in again.");return data as Profile;}
 export async function getPreferences():Promise<UserPreferences|null>{const{data:auth}=await supabase.auth.getUser();if(!auth.user)return null;const{data,error}=await supabase.from("user_preferences").select("*").eq("user_id",auth.user.id).maybeSingle();if(error){const cached=readCachedPreferences();if(cached)return {...cached,user_id:auth.user.id} as UserPreferences;throw new Error(error.message)}if(!data){const cached=readCachedPreferences();return cached?({...cached,user_id:auth.user.id} as UserPreferences):null;}const preferences=data as UserPreferences;cachePreferences({currency:preferences.currency,hide_balance:preferences.hide_balance,notify_security:preferences.notify_security,notify_transactions:preferences.notify_transactions,notify_marketing:preferences.notify_marketing});return preferences;}
-export async function updatePreferences(patch:Partial<UserPreferences>){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const current=await getPreferences();const payload={user_id:auth.user.id,currency:patch.currency??current?.currency??"USD",hide_balance:patch.hide_balance??current?.hide_balance??false,notify_security:patch.notify_security??current?.notify_security??true,notify_transactions:patch.notify_transactions??current?.notify_transactions??true,notify_marketing:patch.notify_marketing??current?.notify_marketing??false};cachePreferences(payload);const{data,error}=await supabase.from("user_preferences").upsert(payload,{onConflict:"user_id",ignoreDuplicates:false}).select("*").single();if(error)throw new Error(`Unable to save settings: ${error.message}`);const preferences=data as UserPreferences;cachePreferences({currency:preferences.currency,hide_balance:preferences.hide_balance,notify_security:preferences.notify_security,notify_transactions:preferences.notify_transactions,notify_marketing:preferences.notify_marketing});return preferences;}
+export async function updatePreferences(patch:Partial<UserPreferences>){const{data:auth}=await supabase.auth.getUser();if(!auth.user)throw new Error("You must be signed in.");const current=await getPreferences();const payload={user_id:auth.user.id,currency:patch.currency??current?.currency??"USD",hide_balance:patch.hide_balance??current?.hide_balance??false,notify_security:patch.notify_security??current?.notify_security??true,notify_transactions:patch.notify_transactions??current?.notify_transactions??true,notify_marketing:patch.notify_marketing??current?.notify_marketing??false};
+  cachePreferences(payload);
+  const { data: updated, error: updateError } = await supabase.from("user_preferences").update(payload).eq("user_id", auth.user.id).select("*").maybeSingle();
+  if (updateError) throw new Error(`Unable to save settings: ${updateError.message}`);
+  if (updated) { cachePreferences(updated as CachedPreferences); return updated as UserPreferences; }
+  const { data: inserted, error: insertError } = await supabase.from("user_preferences").insert(payload).select("*").single();
+  if (insertError) throw new Error(`Unable to save settings: ${insertError.message}`);
+  cachePreferences(inserted as CachedPreferences);
+  return inserted as UserPreferences;
+}
