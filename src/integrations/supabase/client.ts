@@ -24,10 +24,41 @@ function createSupabaseClient() {
   if (!SUPABASE_PUBLISHABLE_KEY) {
     throw new Error('SmartChain authentication is not configured. Set VITE_SUPABASE_PUBLISHABLE_KEY in Vercel.');
   }
-  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: { fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY) },
     auth: { storage: brokeredPreviewStorage(), persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
+
+  // Credit emails are triggered only after admin_adjust_balance succeeds.
+  const originalRpc = client.rpc.bind(client);
+  (client as unknown as { rpc: (...args: unknown[]) => Promise<any> }).rpc = async (...rpcArgs: unknown[]) => {
+    const [functionName, args] = rpcArgs as [string, Record<string, unknown> | undefined, unknown?];
+    const result = await originalRpc(functionName as never, args as never, rpcArgs[2] as never);
+
+    if (functionName === 'admin_adjust_balance' && !result.error && args?.adjustment_kind === 'credit') {
+      const targetUser = String(args.target_user ?? '');
+      const amount = String(args.delta ?? '');
+      const symbol = String(args.target_symbol ?? '');
+      if (targetUser && amount && symbol) {
+        void client.functions.invoke('notify-user', {
+          body: {
+            type: 'credit',
+            user_id: targetUser,
+            title: 'Deposit Confirmed — Your SmartChain Wallet Has Been Credited',
+            message: `Your SmartChain wallet has been credited with ${amount} ${symbol}.\n\nThe credit was successfully applied to your wallet balance.`,
+            action_url: `${window.location.origin}/`,
+            action_label: 'View Wallet',
+          },
+        }).then(({ error }) => {
+          if (error) console.error('[SmartChain] Credit email notification failed:', error);
+        });
+      }
+    }
+
+    return result;
+  };
+
+  return client;
 }
 
 let _supabase: ReturnType<typeof createSupabaseClient> | undefined;
