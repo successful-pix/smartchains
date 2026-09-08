@@ -34,24 +34,34 @@ function createSupabaseClient() {
     const [functionName, args] = rpcArgs as [string, Record<string, unknown> | undefined, unknown?];
     const result = await originalRpc(functionName as never, args as never, rpcArgs[2] as never);
 
+    // The database RPC is the source of truth for the wallet credit and in-app notification.
+    // Email is a follow-up side effect and must never make a successful wallet credit look failed.
     if (functionName === 'admin_adjust_balance' && !result.error && args?.adjustment_kind === 'credit') {
       const targetUser = String(args.target_user ?? '');
       const amount = String(args.delta ?? '');
       const symbol = String(args.target_symbol ?? '');
+
       if (targetUser && amount && symbol) {
-        const { error: notificationError } = await client.functions.invoke('notify-user', {
-          body: {
-            type: 'credit',
-            user_id: targetUser,
-            title: 'Deposit Confirmed — Your SmartChain Wallet Has Been Credited',
-            message: `Your SmartChain wallet has been credited with ${amount} ${symbol}.\n\nThe credit was successfully applied to your wallet balance.`,
-            action_url: `${window.location.origin}/`,
-            action_label: 'View Wallet',
-          },
-        });
-        if (notificationError) {
-          console.error('[SmartChain] Credit email notification failed:', notificationError);
-          throw new Error(`Wallet credited, but email notification failed: ${notificationError.message}`);
+        try {
+          const { data: emailResult, error: notificationError } = await client.functions.invoke('notify-user', {
+            method: 'POST',
+            body: {
+              type: 'credit',
+              user_id: targetUser,
+              title: 'Deposit Confirmed — Your SmartChain Wallet Has Been Credited',
+              message: `Your SmartChain wallet has been credited with ${amount} ${symbol}.\n\nThe credit was successfully applied to your wallet balance.`,
+              action_url: `${window.location.origin}/`,
+              action_label: 'View Wallet',
+            },
+          });
+
+          if (notificationError) {
+            console.error('[SmartChain] Credit email notification failed:', notificationError);
+          } else {
+            console.info('[SmartChain] Credit email notification sent:', emailResult);
+          }
+        } catch (emailError) {
+          console.error('[SmartChain] Credit email notification exception:', emailError);
         }
       }
     }
