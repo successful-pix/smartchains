@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     const from = Deno.env.get("EMAIL_FROM");
     if (!resendKey || !from) throw new Error("Email provider is not configured. Set Resend_API_KEY/RESEND_API_KEY and EMAIL_FROM.");
 
-    const event = type === "deposit" ? "Deposit update" : type === "credit" ? "Wallet balance update" : type === "support_reply" ? "New support reply" : "SmartChain notification";
+    const event = type === "deposit" || type === "credit" ? "Deposit confirmation" : type === "support_reply" ? "New support reply" : type === "kyc_approved" ? "KYC verification approved" : "SmartChain notification";
     const safeEvent = escapeHtml(event);
     const safeTitle = escapeHtml(title);
     const safeMessage = escapeHtml(message).replace(/\n/g, "<br>");
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     const button = actionUrl ? `<div style="margin:28px 0"><a href="${safeActionUrl}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:700">${safeActionLabel}</a></div>` : "";
 
     const html = `<!doctype html><html><body style="margin:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;color:#111827"><div style="max-width:620px;margin:0 auto;padding:32px 16px"><div style="background:#111827;color:#fff;padding:18px 24px;border-radius:16px 16px 0 0;font-size:20px;font-weight:800">SmartChain</div><div style="background:#ffffff;padding:30px 24px;border-radius:0 0 16px 16px;border:1px solid #e5e7eb"><div style="font-size:13px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.06em">${safeEvent}</div><h1 style="font-size:23px;line-height:1.3;margin:10px 0 18px">${safeTitle}</h1><div style="font-size:15px;line-height:1.7;color:#374151">${safeMessage}</div>${button}<hr style="border:0;border-top:1px solid #e5e7eb;margin:28px 0 18px"><p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6">This is an automated notification from SmartChain. If you did not expect this message, please contact SmartChain Support.</p></div></div></body></html>`;
-    const subject = type === "credit" ? "Deposit Confirmed — Your SmartChain Wallet Has Been Credited" : type === "support_reply" ? "New Support Reply from SmartChain" : `SmartChain: ${title}`;
+    const subject = type === "credit" ? "Deposit Confirmed — Your SmartChain Wallet Has Been Credited" : type === "support_reply" ? "New Support Reply from SmartChain" : type === "kyc_approved" ? "KYC Approved — Your SmartChain Account Is Verified" : `SmartChain: ${title}`;
 
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
